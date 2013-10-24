@@ -1,0 +1,245 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<!--
+ Copyright 2008 Google Inc. 
+ Licensed under the Apache License, Version 2.0: 
+ http://www.apache.org/licenses/LICENSE-2.0 
+ -->
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8"/>
+    <title> Anonymous Message to Another Vehicles </title>
+    <script src="http://maps.google.com/maps/api/js?sensor=false"
+      type="text/javascript">
+    </script>
+    <script type="text/javascript" 
+      src="{{ url_for('static', filename='jquery.min.js') }}">
+    </script>
+    <script type="text/javascript" 
+      src="{{ url_for('static', filename='jquery.media.js') }}">
+    </script>
+    <script type="text/javascript" 
+      src="{{ url_for('static', filename='jquery.metadata.js') }}">
+    </script>
+    <script src = "http://malsup.github.com/jquery.form.js"></script>
+    <script type="text/javascript">
+    //<![CDATA[
+    var map;
+    var geocoder;
+    var markers = [];
+    var rulers = [];
+    var ruler_labels = [];
+    var ruler_polys = [];
+    // global variable for loading message
+    var msg_top_index = 0;
+    var msg_bottom_index = 100000000;
+    var page_data_new = { 'msg_s' : 0, 'msg_e' : 0, 'msg_reverse' : 1 };
+    var page_data_old = { 'msg_s' : 0, 'msg_e' : 0, 'msg_reverse' : 0 };
+    // new message get url 
+    var server_url = "/new_message";
+
+    // Draw a map in Korea
+    function initialize() {
+      geocoder = new google.maps.Geocoder();
+      var latlng = new google.maps.LatLng(37.494026, 126.6482867);
+      var myOptions = {
+        zoom: 8,
+        center: latlng,
+        mapTypeId: google.maps.MapTypeId.ROADMAP
+      };
+      map = new google.maps.Map(document.getElementById("map_canvas"), 
+              myOptions);
+    }
+
+    // This ready function.. very very important.. 
+    // It may not run a scroll function, if that ftn leaves alone. 
+    $(document).ready(function() {
+      // form send ajax
+      /*
+      $('#write_form').ajaxForm(function() {
+        $('#write_form')[0].reset();
+        //alert('Thk');
+      });
+      */
+      $("#write_form").submit(function(e) {
+        var formObj = $(this);
+        var formURL = formObj.attr("action");
+        var formData = new FormData(this);
+        $.ajax({
+          url: formURL,
+          type: 'POST',
+          data:  formData,
+          mimeType:"multipart/form-data",
+          contentType: false,
+          cache: false,
+          processData:false,
+          success: function(data, textStatus, jqXHR) { 
+            $('#write_form')[0].reset();
+          },
+          error: function(jqXHR, textStatus, errorThrown) { }          
+        });
+        e.preventDefault(); //Prevent Default action.
+      });
+
+      // media javascript 
+      $('a.media').media();
+      // scroll event 
+      $('#sidebar').bind('scroll', function() {
+        // $('#log').append("sidebar log event. coming...");
+        var elem = $('#sidebar');
+        if (elem[0].scrollHeight  <= elem.scrollTop() + 
+          elem.innerHeight()) {
+          // alert("End of sideBar");
+            
+          var more_btm_idx = msg_bottom_index- 100;
+          page_data_old = { 'msg_s' : more_btm_idx, 
+                    'msg_e' : msg_bottom_index,
+                    'msg_reverse' : 0 };
+
+          $.ajax({ url: server_url, 
+                   success: function(json_msg) {
+                     get_old_message(json_msg);
+                   }, 
+                   data: page_data_old, 
+                   type : 'POST',
+                   dataType: "json", 
+                   //async: true,
+                   //complete: poll, 
+                   //complete: setTimeout(function() { poll(); }, 10000), 
+                   timeout: 30000 
+                 });
+
+        } // end if
+      });
+    });
+
+    function push_msg_item(json_msg) {
+      //var user = data.user;
+      //var time = data.time;
+      var msg_s = json_msg.msg_s;
+      var msg_e = json_msg.msg_e;
+      var inhtml = "";
+      $.each(json_msg.data, function(idx) {
+        var user = json_msg.data[idx].email;
+        var time = json_msg.data[idx].mtime;
+        var msg = json_msg.data[idx].message;   
+        inhtml += "<p>";
+        inhtml += "[" + user + "]";
+        inhtml += "-(" + time + ")<br>";
+        inhtml += "&nbsp; &nbsp; &nbsp; &nbsp;" + msg + "<br>";
+        inhtml += " msg_s : " + msg_s;
+        inhtml += " msg_e : " + msg_e; 
+        inhtml += "</p>";
+      });
+      
+      return inhtml;
+    }
+
+    function get_old_message(json_msg) {
+      var sidebar = document.getElementById('sidebar');
+      //$('#log').append("Test Message for.. log");
+      if ($.isEmptyObject(json_msg.data)) {
+      } else {
+        var rcv_top_idx = Number(json_msg.msg_e);
+        var rcv_btm_idx = Number(json_msg.msg_s);
+        if (msg_top_index < rcv_top_idx) {
+          msg_top_index = rcv_top_idx;
+        }
+        if (msg_bottom_index > rcv_btm_idx) {
+          msg_bottom_index = rcv_btm_idx;
+        }
+        var sidebar_item = push_msg_item(json_msg);
+        $(sidebar_item).appendTo('#sidebar').hide().slideDown();
+      }
+    }
+
+    function get_new_message(json_msg) {
+      var sidebar = document.getElementById('sidebar');
+      //$('#log').append("Test Message for.. log");
+      if ($.isEmptyObject(json_msg.data)) {
+      } else {
+        var rcv_top_idx = Number(json_msg.msg_e);
+        var rcv_btm_idx = Number(json_msg.msg_s);
+        if (msg_top_index < rcv_top_idx) {
+          msg_top_index = rcv_top_idx;
+        }
+        if (msg_bottom_index > rcv_btm_idx) {
+          msg_bottom_index = rcv_btm_idx;
+        }
+        var more_top_idx = rcv_top_idx + 100;
+        page_data_new = { 'msg_s' : rcv_top_idx, 
+          'msg_e' : more_top_idx,
+          'msg_reverse' : 1 };
+        var sidebar_item = push_msg_item(json_msg);
+        $(sidebar_item).prependTo('#sidebar').hide().slideDown();
+      }
+    }
+
+    (function poll() {
+     $.ajax({ url: server_url, 
+              success: function (json_msg) { 
+                get_new_message(json_msg);
+              }, 
+              data: page_data_new, 
+              type : 'POST',
+              dataType: "json", 
+              //async: true,
+              //complete: poll, 
+              complete: setTimeout(function() { poll(); }, 10000), 
+              timeout: 30000 
+            });
+    })();
+
+  //]]>
+  </script>
+
+  </head>
+  <!-- if you press enter key then goto search_locations() -->
+  <body onload="initialize()">
+    <div>
+      {% if user and user.is_authenticated() %}
+        {{ user.email }} -  
+        <a href = "{{ url_for('logout_view') }}">logout</a> &nbsp;
+        <a href = "{{ url_for('admin.index') }}">admin</a>
+      {% else %}
+        <a href="{{ url_for('login_view') }}">login</a> &nbsp; 
+        <a href="{{ url_for('register_view') }}">register</a> &nbsp;
+        <a href = "{{ url_for('admin.index') }}">admin</a>
+      {% endif %}
+    </div>
+     
+    <div style="width:100%; font-family:Arial, 
+                sans-serif; font-size:11px; border:1px solid black">
+      <table> 
+        <tbody> 
+          <tr>
+            <td width="300" valign="top"> 
+              <div id="sidebar" style="overflow: scroll; height: 500px; 
+                                       font-size: 11px; color: #000">
+              </div>
+            </td>
+            <td> <div id="map_canvas" style="overflow: hidden; width:600px; 
+                                             height:500px"></div> 
+            </td>
+          </tr> 
+        </tbody>
+      </table>
+    </div>    
+    <!-- This parts is a tail on the web -->
+    <div id='log'> 
+      <form id='write_form' method='POST' 
+            action="{{url_for('_write_message')}}" 
+            enctype='multipart/form-data'>
+        <textarea name='body' rows='5' cols='80'> </textarea> <br/>
+        <input type='file' name='file'/>
+        <input type='submit' value='save'/>
+        <input type='submit' value='cancel' name='Cancel' />
+        <input type='hidden' name='pt_lon' value='360.0' />
+        <input type='hidden' name='pt_lat' value='360.0' />
+      </form>
+
+      <img src="/media/test.png" > 
+      <a class="media {width:450, height:380, type:'swf'}" href="http://youtube.com/v/TyvN59L4hJU">Youtube Video (SWF)</a> 
+    </div>
+  </body>
+</html>
+
